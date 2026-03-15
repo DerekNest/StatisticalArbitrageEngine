@@ -1,0 +1,12 @@
+# Statistical Arbitrage Engine — Dependencies
+# Install with: pip install -r requirements.txt
+
+numpy>=1.24
+pandas>=2.0
+yfinance>=0.2.40
+statsmodels>=0.14
+scipy>=1.11
+plotly>=5.18
+pyarrow>=14.0          # for parquet caching
+fastparquet>=2023.0    # fallback parquet engine
+tqdm>=4.66             # progress bars
