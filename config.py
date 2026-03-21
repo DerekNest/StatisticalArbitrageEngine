@@ -43,15 +43,15 @@ SECTORS = {
 
     # New: Materials — commodity price anchoring drives tight inter-stock spreads.
     # Miners, chemicals, and packaging companies move together on input costs.
-    "materials":    ["LIN",  "APD",  "SHW",  "FCX",  "NEM",  "NUE",  "DOW",
-                     "DD",   "PPG",  "ALB",  "MOS",  "CF",   "PKG",  "IP"],
-
+    "insurance":    ["TRV",  "CB",   "ALL",  "PGR",  "MET",  "PRU",
+                 "AFL",  "AIG",  "HIG",  "UNM"],
+    
     # New: Consumer Staples — NOT consumer discretionary. Staples (food, household
     # products, tobacco) are slow-moving, defensive businesses with predictable
     # cash flows. PG/CL and KO/PEP are the classic pairs-trading textbook examples.
-    "staples":      ["PG",   "KO",   "PEP",  "WMT",  "COST", "PM",   "MO",
-                     "CL",   "GIS",  "K",    "CPB",  "HRL",  "SJM",  "CAG"],
-
+    "homebuilders": ["DHI",  "LEN",  "PHM",  "NVR",  "TOL",  "MDC",
+                 "KBH",  "MHO",  "TPH",  "TMHC"],
+    
     # New: Industrials — capital goods manufacturers share input costs and
     # demand cycles. HON/EMR, GE/MMM have historically cointegrated well.
     "industrials":  ["HON",  "MMM",  "GE",   "EMR",  "ETN",  "PH",   "ROK",
@@ -61,7 +61,7 @@ SECTORS = {
     # capital-constrained. Sub-sector pairs (office/office, retail/retail)
     # share tenant-mix and cap rate exposure.
     "realestate":   ["PLD",  "AMT",  "EQIX", "PSA",  "SPG",  "O",    "VICI",
-                     "WY",   "EQR",  "AVB",  "DRE",  "ESS",  "MAA",  "UDR"],
+                     "WY",   "EQR",  "AVB",   "ESS",  "MAA",  "UDR"],
 }
 
 ALL_TICKERS: List[str] = [t for tickers in SECTORS.values() for t in tickers]
@@ -102,7 +102,7 @@ class DataConfig:
     # Full history for cointegration screening — the longer the better.
     # Screening on 6yr catches regime shifts the Chow test will filter.
     start_date:     str   = "2018-01-01"
-    end_date:       str   = "2024-01-01"
+    end_date:       str   = "2025-01-01"
     interval:       str   = "1d"
     price_col:      str   = "Adj Close"
     min_history:    int   = 252           # bars needed to approve a ticker
@@ -114,7 +114,7 @@ class DataConfig:
     # Screening still uses the full history above.
     # In production you re-run pair_screener.py every rescreen_days
     # on the trailing screen_lookback_days of data.
-    screen_lookback_days: int = 504        # 0 = full history (best for initial screen)
+    screen_lookback_days: int = 0       # 0 = full history (best for initial screen)
                                           # Set to 504 only for live quarterly re-screens
     rescreen_every_days:  int = 63       # re-screen quarterly in live mode
 
@@ -125,10 +125,10 @@ class DataConfig:
 @dataclass
 class ScreenConfig:
     # Cointegration
-    coint_pvalue_threshold: float = 0.075  # Relaxed from 0.05 to account for lower test power on N=504
+    coint_pvalue_threshold: float = 0.08  # Relaxed from 0.05 to account for lower test power on N=504
     min_half_life:          int   = 5      # days
     max_half_life:          int   = 126    # 126 days
-    min_correlation:        float = 0.75   # Lowered from 0.65 to capture valid lagged sector pairings
+    min_correlation:        float = 0.7   # Lowered from 0.65 to capture valid lagged sector pairings
 
     # Stationarity of the spread
     adf_pvalue_threshold:   float = 0.10   # Relaxed from 0.05 to align with standard 90% CI trading thresholds
@@ -151,7 +151,7 @@ class SignalConfig:
     #     not a parameter to tune. The data resolution changes, the math does not.) ---
     entry_z:            float = 2.2    # 2σ structural dislocation — DO NOT LOWER
     exit_z:             float = 0.5   # exit at spread mean — full round-trip capture
-    stop_z:             float = 4.0    # stop-loss: beyond 4σ the relationship may be breaking
+    stop_z:             float = 3.2    # stop-loss: beyond 4σ the relationship may be breaking
     hedge_method:       str   = "ols"  # rolling OLS — more stable than Kalman on value stocks
 
     # --- Resolution-dependent parameters ---
@@ -174,7 +174,7 @@ class RiskConfig:
     max_pairs:          int   = 20
     risk_per_trade:     float = 0.015
     max_drawdown:       float = 0.12
-    kelly_fraction:     float = 0.35   # Kelly scaling factor (1.0 = full Kelly, 0.5 = half-Kelly)
+    kelly_fraction:     float = .5   # Kelly scaling factor (1.0 = full Kelly, 0.5 = half-Kelly)
     max_loss_per_pair:  float = 0.025
     commission_pct:     float = 0.000
     slippage_pct:       float = 0.0005
@@ -244,7 +244,7 @@ def _build_config() -> "Config":
         cfg.screen.max_half_life = 16     # bars (hours) — ~2 trading days
     else:
         cfg.data.interval    = "1d"
-        cfg.signal.zscore_window = 40
+        cfg.signal.zscore_window = 20
         cfg.signal.min_hold_bars = 1
         cfg.screen.min_half_life = 5      # days
         cfg.screen.max_half_life = 126    # days

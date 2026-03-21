@@ -138,7 +138,7 @@ def run_fold(
     ranked_pairs = screen_all_sectors(
         train_universe,
         cfg.screen,
-        top_n_per_sector=6,   # keep more candidates at this stage since some may fail quality gate
+        top_n_per_sector=8,   # keep more candidates at this stage since some may fail quality gate
         lookback_days=None,   # use full train window for cointegration
     )
 
@@ -159,7 +159,12 @@ def run_fold(
                 "max_dd_pct": 0.0, "win_days_pct": 0.0}
 
     print(f"  Screened {len(ranked_pairs)} pairs: {list(ranked_pairs['pair'])}")
-
+    # After line 161 — print(f"  Screened {len(ranked_pairs)} pairs: ...")
+    # Add this:
+    if fold_idx == 3:  # fold 4 only
+        print(f"  [FOLD 4 DEBUG] Pairs entering quality gate:")
+        for _, r in ranked_pairs.iterrows():
+            print(f"    {r['pair']:12s} coint_p={r['coint_pvalue']:.4f} hl={r['half_life']:.1f} hurst={r['hurst_exp']:.3f}")
     # ------------------------------------------------------------------
     # Step 2: Build signals on TEST window using TRAIN hedge ratios
     # ------------------------------------------------------------------
@@ -241,7 +246,7 @@ def run_fold(
 
         if len(test_spread_df) < 20:
             continue
-
+            # After the `if len(test_spread_df) < 20: continue` line (~line 230):
         # Detect regime on test period
         regimes = detect_regime(test_spread_df)
 
@@ -393,25 +398,34 @@ def run_walk_forward(
     }
 
 
-def _stitch_equity_curves(equity_curves: list) -> pd.DataFrame:
+def _stitch_equity_curves(equity_curves: list) -> pd.Series:
     """
     Join per-fold equity curves into a single continuous OOS equity curve.
-    Each fold starts where the previous one ended (chain-linked returns).
+    Chain-links folds so each fold starts at the ending equity of the previous.
+    Returns a pd.Series (not DataFrame) of equity values indexed by date.
     """
     pieces = []
     running_equity = CFG.risk.capital
 
     for eq_df in equity_curves:
-        fold_returns = eq_df["equity"].pct_change().fillna(0)
-        # Scale so fold starts at running_equity
-        start_val = eq_df["equity"].iloc[0]
-        scaled = (eq_df["equity"] / start_val) * running_equity
+        series = eq_df["equity"].copy()
+        start_val = float(series.iloc[0])
+        if start_val <= 0:
+            continue
+        # Scale fold so it starts at running_equity
+        scaled = (series / start_val) * running_equity
         running_equity = float(scaled.iloc[-1])
         pieces.append(scaled)
 
+    if not pieces:
+        return pd.Series(dtype=float)
+
+    # Concatenate in fold order — do NOT sort_index as that scrambles
+    # the chain-linking. Folds are already in chronological order.
     combined = pd.concat(pieces)
+    # Drop exact duplicate timestamps only (keep last)
     combined = combined[~combined.index.duplicated(keep="last")]
-    return combined.sort_index()
+    return combined
 
 
 # ---------------------------------------------------------------------------

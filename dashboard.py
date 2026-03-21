@@ -73,29 +73,34 @@ def chart_equity_curve(
     wf_equity: Optional[pd.Series] = None,
     initial_capital: float = 100_000,
 ) -> go.Figure:
-    """Equity curve with optional OOS overlay."""
+    """Equity curve — always shows OOS stitched curve rebased to $100k start."""
     fig = go.Figure()
     eq = equity_curve["equity"]
-    fig.add_trace(go.Scatter(x=eq.index, y=eq, name="Strategy (IS)", line=dict(color=BLUE, width=2),
-                             hovertemplate="$%{y:,.0f}<extra>Strategy</extra>"))
-    if wf_equity is not None and len(wf_equity) > 0:
-        fig.add_trace(go.Scatter(x=wf_equity.index, y=wf_equity, name="Strategy (OOS)",
-                                 line=dict(color=GREEN, width=2, dash="dot"),
-                                 hovertemplate="$%{y:,.0f}<extra>OOS</extra>"))
-    fig.add_hline(y=initial_capital, line_color=BG_BORDER, line_width=1, line_dash="dash",
-                  annotation_text="Starting capital", annotation_font_color=TEXT_MUT)
 
-    # Y-axis: pad 5% above/below actual range so moves are visible
-    all_vals = list(eq)
-    if wf_equity is not None and len(wf_equity) > 0:
-        all_vals += list(wf_equity)
-    y_min = min(all_vals)
-    y_max = max(all_vals)
-    pad   = (y_max - y_min) * 0.05 or initial_capital * 0.02
-    fig.update_layout(**_layout_defaults("Equity Curve"))
+    # Rebase so curve always starts exactly at initial_capital
+    eq_rebased = (eq / float(eq.iloc[0])) * initial_capital
+
+    fig.add_trace(go.Scatter(
+        x=eq_rebased.index, y=eq_rebased,
+        name="Strategy (OOS)",
+        line=dict(color=GREEN, width=2.5),
+        hovertemplate="$%{y:,.0f}<extra>OOS Walk-Forward</extra>",
+    ))
+
+    fig.add_hline(
+        y=initial_capital, line_color=BG_BORDER, line_width=1, line_dash="dash",
+        annotation_text="Starting capital", annotation_font_color=TEXT_MUT,
+    )
+
+    y_min = float(eq_rebased.min())
+    y_max = float(eq_rebased.max())
+    pad   = max((y_max - y_min) * 0.15, initial_capital * 0.05)
+
+    fig.update_layout(**_layout_defaults("Equity Curve (OOS Walk-Forward)"))
     fig.update_layout(yaxis=dict(
         tickformat="$,.0f", gridcolor=GRID,
-        range=[y_min - pad, y_max + pad],
+        range=[min(y_min, initial_capital) - pad,
+               max(y_max, initial_capital) + pad],
         title=dict(text="Portfolio Value", font=dict(color=TEXT_MUT)),
     ))
     return fig
@@ -104,8 +109,10 @@ def chart_equity_curve(
 def chart_drawdown(equity_curve: pd.DataFrame) -> go.Figure:
     """Underwater equity chart."""
     eq = equity_curve["equity"]
+    # Rebase to 100k so fold-boundary discontinuities don't corrupt cummax
+    eq = eq / float(eq.iloc[0]) * 100_000
     rolling_max = eq.cummax()
-    dd = (eq - rolling_max) / rolling_max * 100
+    dd = ((eq - rolling_max) / rolling_max * 100).clip(lower=-100)
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=dd.index, y=dd, fill="tozeroy", name="Drawdown",
                              line=dict(color=RED, width=1), fillcolor="rgba(248,81,73,0.15)",
@@ -150,10 +157,11 @@ def chart_pair_pnl(pair_pnl: pd.DataFrame) -> go.Figure:
     fig.update_layout(
         xaxis=dict(
             tickformat="$,.0f", gridcolor=GRID,
-            range=[-(x_abs * 1.4), x_abs * 1.4],
+            range=[-(x_abs * 1.5), x_abs * 1.6],   # extra right room for outside labels
             title=dict(text="Net P&L ($)", font=dict(color=TEXT_MUT)),
         ),
-        yaxis=dict(gridcolor=GRID),
+        yaxis=dict(gridcolor=GRID, automargin=True),   # automargin prevents label clipping
+        margin=dict(l=90, r=30, t=45, b=45),           # explicit left margin for pair names
     )
     return fig
 
@@ -200,10 +208,15 @@ def chart_trade_distribution(trades: pd.DataFrame) -> go.Figure:
         barmode="overlay",
         showlegend=True,
     )
+    # Enforce a minimum x-axis span of $500 so tightly clustered trades
+    # don't compress the axis into an unreadable single column
+    x_span = max(500.0, rng * 1.5)
+    x_center = float(pnl.mean())
     fig.update_layout(
         yaxis=dict(gridcolor=GRID, title=dict(text="# Trades", font=dict(color=TEXT_MUT))),
         xaxis=dict(
             tickprefix="$", tickformat=",.0f", gridcolor=GRID,
+            range=[x_center - x_span / 2, x_center + x_span / 2],
             title=dict(text="Net P&L per Trade ($)", font=dict(color=TEXT_MUT)),
         ),
     )
@@ -344,9 +357,11 @@ def chart_wf_folds(fold_summary: pd.DataFrame) -> go.Figure:
         y=valid["total_return_pct"],
         marker_color=colours,
         text=bar_text,
+        texttemplate="%{text}",      # renders bar_text on the bar
         textposition="outside",
         textfont=dict(size=10, color=TEXT_PRI),
-        width=0.5,                 # fixed width prevents hairline on single-fold
+        width=0.5,
+        customdata=valid[["sharpe", "max_dd_pct", "n_trades"]].values,
         hovertemplate=(
             "<b>%{x}</b><br>"
             "Return: %{y:+.2f}%<br>"
@@ -354,7 +369,6 @@ def chart_wf_folds(fold_summary: pd.DataFrame) -> go.Figure:
             "Max DD: %{customdata[1]:.2f}%<br>"
             "Trades: %{customdata[2]}<extra></extra>"
         ),
-        customdata=valid[["sharpe", "max_dd_pct", "n_trades"]].values,
     ))
 
     fig.add_hline(y=0, line_color=BG_BORDER, line_width=1)
@@ -543,12 +557,11 @@ def build_dashboard(
 
     charts = {}
 
-    charts["equity"]      = chart_equity_curve(equity_curve, wf_equity)
-    charts["drawdown"]    = chart_drawdown(equity_curve)
+    charts["equity"]      = chart_equity_curve(equity_curve)
+    charts["drawdown"]    = chart_drawdown(equity_curve)      # IS: continuous curve needed
     charts["pair_pnl"]    = chart_pair_pnl(pair_pnl)
     charts["trade_dist"]  = chart_trade_distribution(trades)
-    charts["rolling_sh"]  = chart_rolling_sharpe(equity_curve)
-    charts["monthly"]     = chart_monthly_returns(equity_curve)
+    charts["monthly"]     = chart_monthly_returns(equity_curve)  # IS: full date range
 
     if best_pair and best_pair in spread_data:
         charts["spread"]  = chart_spread_zscore(
@@ -620,8 +633,6 @@ def build_dashboard(
 
   <div class="panel">{to_div(charts['pair_pnl'], 300)}</div>
   <div class="panel">{to_div(charts['trade_dist'], 300)}</div>
-
-  <div class="panel full">{to_div(charts['rolling_sh'], 260)}</div>
 
   {'<div class="panel full">' + to_div(charts['spread'], 520) + '</div>' if 'spread' in charts else ''}
   {'<div class="panel full">' + to_div(charts['wf_folds'], 280) + '</div>' if 'wf_folds' in charts else ''}
@@ -754,7 +765,7 @@ if __name__ == "__main__":
 
         # The equity chart shows IS curve as context + OOS as the headline overlay
         # Pass IS equity as equity_curve (shown in blue), OOS as wf_equity (dotted green)
-        display_equity   = is_equity      # IS: full 6-year context
+        display_equity   = oos_equity_df      # IS: full 6-year context
         display_trades   = all_fold_trades if not all_fold_trades.empty else is_trades
         display_pair_pnl = oos_pair_pnl
         display_metrics  = oos_metrics    # HEADLINE: OOS metrics in summary card

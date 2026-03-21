@@ -167,7 +167,7 @@ class PairsBacktester:
 
             ok, reason = passes_quality_gate(
                 stats_row.iloc[0].to_dict(),
-                min_trades=1,
+                min_trades=0,   # no minimum trades filter — we want to keep promising pairs that just haven't traded yet
                 min_adf_pvalue_threshold=0.10,
                 adf_pvalue=float(qual_row.iloc[0]["adf_pvalue"]),
             )
@@ -181,8 +181,8 @@ class PairsBacktester:
 
                 if ticker_counts.get(ty, 0) < 2 and ticker_counts.get(tx, 0) < 2:
                     approved.append(pair_name)
-                    ticker_counts[ty] = ticker_counts.get(ty, 0) + 1
-                    ticker_counts[tx] = ticker_counts.get(tx, 0) + 1
+                ticker_counts[ty] = ticker_counts.get(ty, 0) + 1
+                ticker_counts[tx] = ticker_counts.get(tx, 0) + 1
             else:
                 log.debug(f"  Excluding {pair_name}: {reason}")
 
@@ -230,7 +230,7 @@ class PairsBacktester:
         new_ranked = screen_all_sectors(
             universe,
             CFG.screen,
-            top_n_per_sector=6,   # keep more candidates at this stage since some may fail quality gate
+            top_n_per_sector=8,   # keep more candidates at this stage since some may fail quality gate
             lookback_days=None,   # use full lookback_prices (already sliced)
         )
 
