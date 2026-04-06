@@ -8,14 +8,12 @@ S&P 500 pairs trading system built in Python. Event-driven backtester with quart
 
 | Metric | Value |
 |--------|-------|
-| Mean OOS Sharpe | 1.662 |
-| Median OOS Sharpe | 1.36 |
-| Mean OOS Return | +5.17% per fold |
-| Mean Max Drawdown | −1.50% |
+| Mean OOS Sharpe | 1.499 |
+| Median OOS Sharpe | 1.434 |
+| Mean OOS Return | +4.66% per fold |
+| Mean Max Drawdown | −1.58% |
 | Profitable Folds | 4 / 4 |
-| Total OOS Trades | 42 |
-| Ann. Volatility | 3.49% |
-| Calmar Ratio | 1.569 |
+| Total OOS Trades | 43 |
 
 All metrics are computed exclusively on out-of-sample test periods. No in-sample data contaminates the reported performance.
 
@@ -24,14 +22,14 @@ All metrics are computed exclusively on out-of-sample test periods. No in-sample
 | Fold | Test Period | Pairs | Trades | Return | Sharpe | Max DD |
 |------|-------------|-------|--------|--------|--------|--------|
 | 1 | 2020 | 19 | 6 | +3.14% | 1.193 | −1.49% |
-| 2 | 2021 | 36 | 18 | +5.71% | 1.086 | −2.72% |
-| 3 | 2022 | 51 | 15 | +9.39% | 2.738 | −0.85% |
-| 4 | 2023 | 24 | 3 | +2.44% | 1.631 | −0.94% |
+| 2 | 2021 | 38 | 22 | +7.58% | 1.240 | −2.72% |
+| 3 | 2022 | 51 | 12 | +5.51% | 1.930 | −1.17% |
+| 4 | 2023 | 25 | 3 | +2.43% | 1.634 | −0.94% |
 
 **Notes on interpretation:**
-- Fold 3 (2022) benefited from insurance sector dynamics during the Fed rate-hike cycle — rising rates benefit insurers' investment portfolios at different speeds depending on asset mix, creating genuine spread opportunities. The 2.738 Sharpe on 15 trades should be treated as potentially regime-specific. The median fold Sharpe (1.36) is a more conservative headline figure.
-- Fold 4 (2023) saw limited signal generation due to compressed spreads in a low-volatility environment. 3 high-quality trades at 1.631 Sharpe reflects appropriate selectivity rather than a system failure.
-- 42 total OOS trades gives a 95% Sharpe confidence interval of approximately ±0.5.
+- Fold 3 (2022) benefited from insurance sector dynamics during the Fed rate-hike cycle — rising rates benefit insurers' investment portfolios at different speeds depending on asset mix, creating genuine spread opportunities. The 1.930 Sharpe on 12 trades should be treated as potentially regime-specific. The median fold Sharpe (1.434) is a more conservative headline figure.
+- Fold 4 (2023) saw limited signal generation due to compressed spreads in a low-volatility environment. 3 high-quality trades at 1.634 Sharpe reflects appropriate selectivity rather than a system failure.
+- 43 total OOS trades gives a 95% Sharpe confidence interval of approximately ±0.5.
 
 ---
 
@@ -57,7 +55,7 @@ live_trader.py       — End-of-day live execution via Alpaca Markets
 
 ### Universe
 
-100 S&P 500 stocks screened sector-by-sector across eight sectors. Cross-sector pairs are excluded — same-sector stocks share macro exposures that drive genuine cointegration.
+118 S&P 500 stocks screened sector-by-sector across ten sectors. Cross-sector pairs are excluded — same-sector stocks share macro exposures that drive genuine cointegration.
 
 | Sector | Rationale |
 |--------|-----------|
@@ -69,10 +67,12 @@ live_trader.py       — End-of-day live execution via Alpaca Markets
 | Homebuilders | Shared input costs (lumber, land, labour) and mortgage rate exposure |
 | Industrials | Capital goods manufacturers sharing input costs and demand cycles |
 | Real Estate | Rate-sensitive REITs with sector-anchored cap rate exposure |
+| Telecom | Regulated duopoly (T/VZ) with near-identical capex cycle and revenue mix |
+| Consumer Staples | Tight sub-sector pairs (KO/PEP, PG/CL) anchored to commodity input costs |
 
 **Why not Technology or Consumer Discretionary:** Momentum-driven equities violate the stationarity assumption. Hedge ratios drift irreversibly as one leg compounds at multiples of the other — the spread widens without bound rather than mean-reverting.
 
-**Why Insurance and Homebuilders instead of Materials and Staples:** Materials (LIN, SHW, FCX, NEM) is a mixed universe without tight enough shared factor exposure — zero cointegrated pairs across all four walk-forward folds. Consumer Staples failed the correlation pre-filter across all 78 candidate pairs. Insurance companies share actuarial pricing and rate sensitivity producing stable long-run spreads. Homebuilders share input costs and mortgage rate exposure almost perfectly; DHI/LEN is among the most consistently cointegrated pairs in the S&P 500.
+**Why not Materials or broad Consumer Staples:** Materials (LIN, SHW, FCX, NEM) is a mixed universe without tight enough shared factor exposure — zero cointegrated pairs across all four walk-forward folds. A broad staples universe failed the correlation pre-filter across all 78 candidate pairs. The staples universe here is restricted to tight sub-sectors (beverages, HPC/food) where shared factor exposure is genuine.
 
 ### Pair Screening
 
@@ -246,8 +246,8 @@ max_drawdown      = 0.12    # portfolio hard circuit breaker
 
 ## Limitations
 
-- **Sample size** — 42 OOS trades gives a 95% Sharpe confidence interval of approximately ±0.5. The true out-of-sample Sharpe is likely in the range 1.1–2.2.
-- **Fold 3 regime dependence** — the 2022 insurance sector outperformance may not repeat in a stable rate environment. The median Sharpe (1.36) is the more conservative headline figure.
+- **Sample size** — 43 OOS trades gives a 95% Sharpe confidence interval of approximately ±0.5. The true out-of-sample Sharpe is likely in the range 1.0–2.0.
+- **Fold 3 regime dependence** — the 2022 insurance sector outperformance may not repeat in a stable rate environment. The median Sharpe (1.434) is the more conservative headline figure.
 - **Fold 4 signal scarcity** — 2023's low-dispersion environment limited the strategy to 3 trades. This reflects genuine market conditions but reduces statistical confidence in fold 4's metrics.
 - **Data source** — daily adjusted close prices from yfinance. Survivorship bias is partially mitigated by using a fixed universe defined at project start.
 - **Transaction costs** — slippage modelled as 0.05% flat. Real market impact for larger positions is size-dependent.
